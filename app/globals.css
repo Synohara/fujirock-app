@@ -1,26 +1,126 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  --radius: 0.625rem;
+  /* フジロックのカラーパレット - ライトモード */
+  --background: #ffffff; /* 白背景 */
+  --foreground: #1a1a1a; /* ダークグレーテキスト */
+  --card: #f8f9fa;
+  --card-foreground: #1a1a1a;
+  --popover: #ffffff;
+  --popover-foreground: #1a1a1a;
+  --primary: #ffcc00; /* フジロックイエロー */
+  --primary-foreground: #1a1a1a;
+  --secondary: #40e0d0; /* ターコイズ */
+  --secondary-foreground: #1a1a1a;
+  --muted: #f1f3f4;
+  --muted-foreground: #6b7280;
+  --accent: #ff6b35; /* オレンジ */
+  --accent-foreground: #ffffff;
+  --destructive: #ff4444;
+  --border: #e5e7eb;
+  --input: #ffffff;
+  --ring: #ffcc00;
+  --chart-1: #ffcc00;
+  --chart-2: #40e0d0;
+  --chart-3: #ff6b35;
+  --chart-4: #8a2be2;
+  --chart-5: #32cd32;
+  --sidebar: #f8f9fa;
+  --sidebar-foreground: #1a1a1a;
+  --sidebar-primary: #ffcc00;
+  --sidebar-primary-foreground: #1a1a1a;
+  --sidebar-accent: #ff6b35;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #e5e7eb;
+  --sidebar-ring: #40e0d0;
+}
+
+.dark {
+  /* フジロックのカラーパレット - ダークモード */
+  --background: #0a1f0a; /* 深い森の夜 */
+  --foreground: #e8f4e8;
+  --card: #1a3a1a;
+  --card-foreground: #e8f4e8;
+  --popover: #1a3a1a;
+  --popover-foreground: #e8f4e8;
+  --primary: #ff8c42; /* 明るいオレンジ */
+  --primary-foreground: #0a1f0a;
+  --secondary: #52b788; /* フォレストグリーン */
+  --secondary-foreground: #e8f4e8;
+  --muted: #2d4a2d;
+  --muted-foreground: #a8c9a8;
+  --accent: #ffd93d; /* イエロー */
+  --accent-foreground: #0a1f0a;
+  --destructive: #ff6b6b;
+  --border: #2d4a2d;
+  --input: #1a3a1a;
+  --ring: #52b788;
+  --chart-1: #ff8c42;
+  --chart-2: #52b788;
+  --chart-3: #ffd93d;
+  --chart-4: #4ecdc4;
+  --chart-5: #95e1d3;
+  --sidebar: #1a3a1a;
+  --sidebar-foreground: #e8f4e8;
+  --sidebar-primary: #ff8c42;
+  --sidebar-primary-foreground: #0a1f0a;
+  --sidebar-accent: #ffd93d;
+  --sidebar-accent-foreground: #0a1f0a;
+  --sidebar-border: #2d4a2d;
+  --sidebar-ring: #52b788;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+    outline-color: color-mix(in srgb, var(--ring) 50%, transparent);
   }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
 }
