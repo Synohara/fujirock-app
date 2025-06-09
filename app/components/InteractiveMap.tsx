@@ -68,22 +68,30 @@ export default function InteractiveMap({ myTimetable, timetableData, selectedDay
   useEffect(() => {
     if (!isLoaded || !L || map) return;
 
-    // マップの初期化
-    const mapInstance = L.map('map-container').setView([36.8480, 138.7025], 16);
+    // DOM要素の存在確認
+    const mapContainer = document.getElementById('map-container');
+    if (!mapContainer) return;
 
-    // タイルレイヤーの追加
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-    }).addTo(mapInstance);
+    try {
+      // マップの初期化
+      const mapInstance = L.map(mapContainer).setView([36.8480, 138.7025], 16);
 
-    setMap(mapInstance);
+      // タイルレイヤーの追加
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      }).addTo(mapInstance);
 
-    // クリーンアップ
-    return () => {
-      if (mapInstance) {
-        mapInstance.remove();
-      }
-    };
+      setMap(mapInstance);
+
+      // クリーンアップ
+      return () => {
+        if (mapInstance) {
+          mapInstance.remove();
+        }
+      };
+    } catch (error) {
+      console.error('Map initialization failed:', error);
+    }
   }, [isLoaded, L, map]);
 
   useEffect(() => {
@@ -138,7 +146,12 @@ export default function InteractiveMap({ myTimetable, timetableData, selectedDay
         iconAnchor: [20, 20]
       });
 
-      const marker = L.marker([stage.lat, stage.lng], { icon }).addTo(map);
+      const marker = L.marker([stage.lat, stage.lng], { icon });
+      try {
+        marker.addTo(map);
+      } catch (error) {
+        console.error('Marker add failed:', error);
+      }
 
       // ポップアップの内容
       let popupContent = `<div class="text-center"><h4 class="font-bold">${stage.name}</h4>`;
@@ -196,7 +209,13 @@ export default function InteractiveMap({ myTimetable, timetableData, selectedDay
         iconAnchor: [12, 12]
       });
 
-      const perfMarker = L.marker([stage.lat + offsetLat, stage.lng + offsetLng], { icon: perfIcon }).addTo(map);
+      const perfMarker = L.marker([stage.lat + offsetLat, stage.lng + offsetLng], { icon: perfIcon });
+      try {
+        perfMarker.addTo(map);
+      } catch (error) {
+        console.error('Performance marker add failed:', error);
+        return;
+      }
       
       perfMarker.bindPopup(`
         <div class="text-center">
@@ -228,12 +247,17 @@ export default function InteractiveMap({ myTimetable, timetableData, selectedDay
       });
 
       if (path.length > 1) {
-        L.polyline(path, {
+        const polyline = L.polyline(path, {
           color: '#ffcc00',
           weight: 3,
           opacity: 0.8,
           dashArray: '8, 4'
-        }).addTo(map);
+        });
+        try {
+          polyline.addTo(map);
+        } catch (error) {
+          console.error('Polyline add failed:', error);
+        }
       }
     }
   }, [map, L, myTimetable, timetableData, selectedDay]);
