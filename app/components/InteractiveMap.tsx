@@ -27,8 +27,8 @@ interface InteractiveMapProps {
 }
 
 export default function InteractiveMap({ myTimetable, timetableData, selectedDay }: InteractiveMapProps) {
-  const [map, setMap] = useState<any>(null);
-  const [L, setL] = useState<any>(null);
+  const [map, setMap] = useState<L.Map | null>(null);
+  const [L, setL] = useState<typeof import('leaflet') | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
@@ -48,7 +48,7 @@ export default function InteractiveMap({ myTimetable, timetableData, selectedDay
         }
 
         // アイコンの修正
-        delete (leaflet.Icon.Default.prototype as any)._getIconUrl;
+        delete (leaflet.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
         leaflet.Icon.Default.mergeOptions({
           iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
           iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
@@ -84,13 +84,13 @@ export default function InteractiveMap({ myTimetable, timetableData, selectedDay
         mapInstance.remove();
       }
     };
-  }, [isLoaded, L]);
+  }, [isLoaded, L, map]);
 
   useEffect(() => {
     if (!map || !L || !timetableData) return;
 
     // 既存のマーカーとポリラインをクリア
-    map.eachLayer((layer: any) => {
+    map.eachLayer((layer: L.Layer) => {
       if (layer instanceof L.Marker || layer instanceof L.Polyline) {
         map.removeLayer(layer);
       }
@@ -113,7 +113,6 @@ export default function InteractiveMap({ myTimetable, timetableData, selectedDay
     // ステージマーカーを追加（メインステージ）
     STAGE_POSITIONS.filter(s => s.id !== 'oasis').forEach(stage => {
       const hasPerformance = selectedPerformances.some(p => p.stage === stage.name);
-      const performanceNumbers = stagePerformances[stage.name]?.join(',');
 
       const icon = L.divIcon({
         html: `
@@ -211,7 +210,7 @@ export default function InteractiveMap({ myTimetable, timetableData, selectedDay
     // 移動経路を追加（個別パフォーマンスマーカーの位置を使用）
     if (selectedPerformances.length > 1) {
       const path: [number, number][] = [];
-      selectedPerformances.forEach((perf, index) => {
+      selectedPerformances.forEach((perf) => {
         const stage = STAGE_POSITIONS.find(s => s.name === perf.stage);
         if (!stage) return;
 

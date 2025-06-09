@@ -69,15 +69,7 @@ export default function TimetableView() {
     return (start1 < end2 && end1 > start2);
   };
 
-  const groupByStage = (performances: Performance[]) => {
-    if (!stages || stages.length === 0) return {};
-    return stages.reduce((acc, stage) => {
-      acc[stage.name] = performances.filter(p => p.stage === stage.name);
-      return acc;
-    }, {} as Record<string, Performance[]>);
-  };
 
-  // const performancesByStage = groupByStage(dayPerformances);
 
   const exportTimetable = () => {
     const selectedPerformances = myTimetable
@@ -241,7 +233,7 @@ export default function TimetableView() {
               }
 
               // 時間重複チェック
-              const checkTimeOverlap = (perf1: any, perf2: any): boolean => {
+              const checkTimeOverlap = (perf1: Performance, perf2: Performance): boolean => {
                 const start1 = new Date(`2025-07-${24 + perf1.day} ${perf1.start_time}`);
                 const end1 = new Date(`2025-07-${24 + perf1.day} ${perf1.end_time}`);
                 const start2 = new Date(`2025-07-${24 + perf2.day} ${perf2.start_time}`);
@@ -251,7 +243,7 @@ export default function TimetableView() {
               };
 
               // パフォーマンスの位置計算（重複を考慮）
-              const getPerformancePosition = (performance: any, allPerformances: any[]) => {
+              const getPerformancePosition = (performance: Performance, allPerformances: Performance[]) => {
                 const [startHour, startMin] = performance.start_time.split(':').map(Number);
                 const [endHour, endMin] = performance.end_time.split(':').map(Number);
                 
