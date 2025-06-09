@@ -108,7 +108,7 @@ export default function TimelineView({
               <div key={stage.id} className="relative">
                 {/* ステージヘッダー */}
                 <div className={`h-12 flex items-center justify-center font-bold text-sm rounded-t sticky top-0 z-20 ${
-                  STAGE_COLORS[stage.name] || 'bg-gray-600'
+                  STAGE_COLORS[stage.name as keyof typeof STAGE_COLORS] || 'bg-gray-600'
                 }`}>
                   {stage.name}
                 </div>
