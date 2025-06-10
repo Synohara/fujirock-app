@@ -124,3 +124,60 @@
     color: var(--foreground);
   }
 }
+
+/* カスタムローディングアニメーション */
+@keyframes festival-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.7;
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* パフォーマンスカードのホバーエフェクト */
+.performance-card {
+  transition: all 0.2s ease;
+}
+
+.performance-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* スムーズなフェードイン */
+.fade-in {
+  animation: slide-up 0.3s ease-out;
+}
+
+/* ローディング時のパルス */
+.festival-pulse {
+  animation: festival-pulse 1.5s ease-in-out infinite;
+}
+
+/* カスタムスピナー */
+.animate-spin-slow {
+  animation: spin-slow 3s linear infinite;
+}

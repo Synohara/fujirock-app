@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Performance, Stage } from '../types';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import SkeletonLoader from './SkeletonLoader';
 
 interface TimelineViewProps {
   performances: Performance[];
@@ -26,6 +27,15 @@ export default function TimelineView({
   toggleMyTimetable
 }: TimelineViewProps) {
   const [selectedStageIndex, setSelectedStageIndex] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    // シミュレートされた初期ロード
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, []);
   // 時間帯の生成（10:00から翌朝5:00まで）
   const timeSlots: string[] = [];
   for (let hour = 10; hour < 24; hour++) {
@@ -190,12 +200,13 @@ export default function TimelineView({
                     <div
                       key={performance.id}
                       onClick={() => toggleMyTimetable(performance.id)}
-                      className={`absolute px-1 py-1 rounded cursor-pointer transition-all overflow-hidden border text-xs ${
+                      className={`absolute px-1 py-1 rounded cursor-pointer transition-all overflow-hidden border text-xs performance-card ${
                         isSelected
                           ? 'bg-primary text-primary-foreground z-30 border-primary'
                           : 'bg-card hover:bg-muted/50 border-border text-foreground'
                       }`}
                       style={mobileStyle}
+                      data-performance-id={performance.id}
                     >
                       <div className="font-semibold truncate" style={{ fontSize: '11px' }}>
                         {performance.artist}
@@ -262,12 +273,13 @@ export default function TimelineView({
                         <div
                           key={performance.id}
                           onClick={() => toggleMyTimetable(performance.id)}
-                          className={`absolute px-2 py-1 rounded cursor-pointer transition-all overflow-hidden border ${
+                          className={`absolute px-2 py-1 rounded cursor-pointer transition-all overflow-hidden border performance-card ${
                             isSelected
                               ? 'bg-primary text-primary-foreground z-30 border-primary'
                               : 'bg-card hover:bg-muted/50 border-border text-foreground'
                           }`}
                           style={style}
+                          data-performance-id={performance.id}
                         >
                           <div className="text-xs font-semibold truncate">
                             {performance.artist}
@@ -287,6 +299,10 @@ export default function TimelineView({
       </div>
     </div>
   );
+
+  if (isLoading) {
+    return <SkeletonLoader type="timetable" />;
+  }
 
   return (
     <>

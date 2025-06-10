@@ -9,6 +9,8 @@ import { Card } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import React from 'react';
 import { Search, MapPin, Calendar, Download, X, Star } from 'lucide-react';
+import LoadingSpinner from './LoadingSpinner';
+import SkeletonLoader from './SkeletonLoader';
 
 const STAGE_COLORS = {
   'GREEN STAGE': 'bg-green-600 text-white',
@@ -19,6 +21,8 @@ const STAGE_COLORS = {
 
 export default function TimetableView() {
   const [timetableData, setTimetableData] = useState<TimetableData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadingError, setLoadingError] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState(1);
   const [myTimetable, setMyTimetable] = useState<string[]>(() => {
     if (typeof window !== 'undefined') {
@@ -30,12 +34,36 @@ export default function TimetableView() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStage, setSelectedStage] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'timetable' | 'map' | 'mytimetable'>('timetable');
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
+    setIsLoading(true);
+    setLoadingError(null);
+    
     fetch('/timetable.json')
-      .then(res => res.json())
-      .then(data => setTimetableData(data))
-      .catch(err => console.error('Failed to load timetable:', err));
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        return res.json();
+      })
+      .then(data => {
+        // データの構造を検証
+        if (!data.performances || !data.stages) {
+          throw new Error('Invalid data structure');
+        }
+        setTimetableData(data);
+        setLoadingError(null);
+      })
+      .catch(err => {
+        console.error('Failed to load timetable:', err);
+        setLoadingError(err.message || 'データの読み込みに失敗しました');
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
   }, []);
 
   useEffect(() => {
@@ -44,8 +72,39 @@ export default function TimetableView() {
     }
   }, [myTimetable]);
 
-  if (!timetableData) {
-    return <div className="p-8 text-center">Loading...</div>;
+  if (isLoading || !timetableData) {
+    return (
+      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
+        <div className="text-center">
+          <LoadingSpinner size="lg" message="タイムテーブルを読み込み中..." />
+          <div className="mt-4 space-y-1">
+            <p className="text-sm text-muted-foreground animate-pulse">FUJI ROCK FESTIVAL 2025</p>
+            <p className="text-xs text-muted-foreground/70">データを準備しています</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadingError) {
+    return (
+      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto px-4">
+          <div className="mb-4 text-red-500">
+            <X className="h-12 w-12 mx-auto mb-2" />
+          </div>
+          <h2 className="text-xl font-bold mb-2">データの読み込みに失敗しました</h2>
+          <p className="text-muted-foreground mb-4">{loadingError}</p>
+          <Button 
+            onClick={() => window.location.reload()} 
+            variant="outline"
+            className="mr-2"
+          >
+            再読み込み
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   const dayPerformances = timetableData.performances
@@ -58,6 +117,13 @@ export default function TimetableView() {
     : timetableData.stages.filter(s => s.name === selectedStage);
 
   const toggleMyTimetable = (performanceId: string) => {
+    // 追加/削除時の視覚的フィードバック
+    const button = document.querySelector(`[data-performance-id="${performanceId}"]`);
+    if (button) {
+      button.classList.add('scale-95');
+      setTimeout(() => button.classList.remove('scale-95'), 200);
+    }
+    
     setMyTimetable(prev => 
       prev.includes(performanceId)
         ? prev.filter(id => id !== performanceId)
@@ -108,44 +174,63 @@ export default function TimetableView() {
 
 
 
-  const exportTimetable = () => {
-    const selectedPerformances = myTimetable
-      .map(id => timetableData?.performances.find(p => p.id === id))
-      .filter((p): p is Performance => p !== undefined)
-      .sort((a, b) => {
-        if (a.day !== b.day) return a.day - b.day;
-        
-        // 時間を数値に変換（深夜時間0-5時は24+時間として扱う）
-        const getTimeValue = (timeStr: string) => {
-          const [hour, minute] = timeStr.split(':').map(Number);
-          return hour >= 0 && hour < 6 ? (hour + 24) * 60 + minute : hour * 60 + minute;
-        };
-        
-        return getTimeValue(a.start_time) - getTimeValue(b.start_time);
+  const handleViewModeChange = (mode: 'timetable' | 'map' | 'mytimetable') => {
+    setIsTransitioning(true);
+    setTimeout(() => {
+      setViewMode(mode);
+      setIsTransitioning(false);
+    }, 150);
+  };
+
+  const exportTimetable = async () => {
+    setIsExporting(true);
+    
+    try {
+      // 少し遅延を追加してローディング状態を表示
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      const selectedPerformances = myTimetable
+        .map(id => timetableData?.performances.find(p => p.id === id))
+        .filter((p): p is Performance => p !== undefined)
+        .sort((a, b) => {
+          if (a.day !== b.day) return a.day - b.day;
+          
+          // 時間を数値に変換（深夜時間0-5時は24+時間として扱う）
+          const getTimeValue = (timeStr: string) => {
+            const [hour, minute] = timeStr.split(':').map(Number);
+            return hour >= 0 && hour < 6 ? (hour + 24) * 60 + minute : hour * 60 + minute;
+          };
+          
+          return getTimeValue(a.start_time) - getTimeValue(b.start_time);
+        });
+
+      let exportText = "FUJI ROCK FESTIVAL 2025 - My Timetable\n";
+      exportText += "==========================================\n\n";
+
+      let currentDay = 0;
+      selectedPerformances.forEach(perf => {
+        if (perf.day !== currentDay) {
+          currentDay = perf.day;
+          exportText += `\nDay ${perf.day} (${perf.date})\n`;
+          exportText += "-------------------\n";
+        }
+        exportText += `${perf.start_time} - ${perf.end_time} | ${perf.artist} @ ${perf.stage}\n`;
       });
 
-    let exportText = "FUJI ROCK FESTIVAL 2025 - My Timetable\n";
-    exportText += "==========================================\n\n";
-
-    let currentDay = 0;
-    selectedPerformances.forEach(perf => {
-      if (perf.day !== currentDay) {
-        currentDay = perf.day;
-        exportText += `\nDay ${perf.day} (${perf.date})\n`;
-        exportText += "-------------------\n";
-      }
-      exportText += `${perf.start_time} - ${perf.end_time} | ${perf.artist} @ ${perf.stage}\n`;
-    });
-
-    const blob = new Blob([exportText], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'fujirock2025_mytimetable.txt';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+      const blob = new Blob([exportText], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'fujirock2025_mytimetable.txt';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Export failed:', error);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -175,14 +260,33 @@ export default function TimetableView() {
         <Card className="p-4 mb-6 mx-auto bg-card/80 backdrop-blur border-border">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 transition-colors ${
+                isSearching ? 'text-primary animate-pulse' : 'text-gray-400'
+              }`} />
               <input
                 type="text"
                 placeholder="アーティストを検索..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 pr-4 py-2 w-full rounded-lg bg-input text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setIsSearching(true);
+                  setTimeout(() => setIsSearching(false), 600);
+                }}
+                className="pl-10 pr-10 py-2 w-full rounded-lg bg-input text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all"
               />
+              {isSearching && (
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                  <LoadingSpinner size="sm" />
+                </div>
+              )}
+              {!isSearching && searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-foreground transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
             <select
               value={selectedStage}
@@ -199,7 +303,7 @@ export default function TimetableView() {
 
         <div className="flex flex-col sm:flex-row justify-center mb-6 gap-4">
           <Button
-            onClick={() => setViewMode('timetable')}
+            onClick={() => handleViewModeChange('timetable')}
             variant={viewMode === 'timetable' ? 'default' : 'outline'}
             className={viewMode === 'timetable' ? 'bg-gradient-to-r from-yellow-400 to-orange-500 text-black' : ''}
           >
@@ -207,7 +311,7 @@ export default function TimetableView() {
             タイムテーブル
           </Button>
           <Button
-            onClick={() => setViewMode('mytimetable')}
+            onClick={() => handleViewModeChange('mytimetable')}
             variant={viewMode === 'mytimetable' ? 'default' : 'outline'}
             className={viewMode === 'mytimetable' ? 'bg-gradient-to-r from-yellow-400 to-orange-500 text-black' : ''}
           >
@@ -220,7 +324,7 @@ export default function TimetableView() {
             )}
           </Button>
           <Button
-            onClick={() => setViewMode('map')}
+            onClick={() => handleViewModeChange('map')}
             variant={viewMode === 'map' ? 'default' : 'outline'}
             className={viewMode === 'map' ? 'bg-gradient-to-r from-yellow-400 to-orange-500 text-black' : ''}
           >
@@ -230,24 +334,58 @@ export default function TimetableView() {
         </div>
 
 
-        {viewMode === 'timetable' && (
-          <TimelineView 
-            performances={dayPerformances}
-            stages={stages}
-            myTimetable={myTimetable}
-            toggleMyTimetable={toggleMyTimetable}
-          />
-        )}
-        
-        {viewMode === 'map' && (
-          <MapView 
-            myTimetable={myTimetable}
-            timetableData={timetableData}
-            selectedDay={selectedDay}
-          />
-        )}
-        
-        {viewMode === 'mytimetable' && (
+        <div className={`transition-opacity duration-300 ${isTransitioning ? 'opacity-0' : 'opacity-100'}`}>
+          {isTransitioning && (
+            <div className="flex items-center justify-center h-64">
+              <LoadingSpinner size="md" />
+            </div>
+          )}
+          
+          {!isTransitioning && viewMode === 'timetable' && (
+            <>
+              {isSearching ? (
+                <div className="flex items-center justify-center h-32">
+                  <LoadingSpinner size="md" message="検索中..." />
+                </div>
+              ) : dayPerformances.length === 0 ? (
+                <div className="text-center py-12">
+                  <Search className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                  <h3 className="text-lg font-medium mb-2">
+                    {searchQuery ? '検索結果が見つかりません' : 'パフォーマンスが見つかりません'}
+                  </h3>
+                  <p className="text-muted-foreground mb-4">
+                    {searchQuery ? `"${searchQuery}" に一致するアーティストが見つかりませんでした` : '選択された条件に一致するパフォーマンスがありません'}
+                  </p>
+                  {searchQuery && (
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setSearchQuery('')}
+                      size="sm"
+                    >
+                      検索をクリア
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <TimelineView 
+                  performances={dayPerformances}
+                  stages={stages}
+                  myTimetable={myTimetable}
+                  toggleMyTimetable={toggleMyTimetable}
+                />
+              )}
+            </>
+          )}
+          
+          {!isTransitioning && viewMode === 'map' && (
+            <MapView 
+              myTimetable={myTimetable}
+              timetableData={timetableData}
+              selectedDay={selectedDay}
+            />
+          )}
+          
+          {!isTransitioning && viewMode === 'mytimetable' && (
           <div className="bg-card rounded-lg p-4 sm:p-6 border border-border">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl sm:text-2xl font-bold text-foreground">My Timetable</h3>
@@ -255,9 +393,17 @@ export default function TimetableView() {
                 onClick={() => exportTimetable()}
                 size="sm"
                 variant="outline"
+                disabled={isExporting}
+                className={isExporting ? 'opacity-50 cursor-not-allowed' : ''}
               >
-                <Download className="h-4 w-4 mr-2" />
-                Export
+                {isExporting ? (
+                  <div className="mr-2">
+                    <LoadingSpinner size="sm" />
+                  </div>
+                ) : (
+                  <Download className="h-4 w-4 mr-2" />
+                )}
+                {isExporting ? 'エクスポート中...' : 'Export'}
               </Button>
             </div>
             
@@ -313,13 +459,26 @@ export default function TimetableView() {
                       );
                     }
                     
-                    // 総移動時間を計算
+                    // 総移動時間を計算（30分以内の移動のみ）
                     let totalWalkingTime = 0;
                     dayPerformances.forEach((performance, idx) => {
                       if (idx < dayPerformances.length - 1) {
                         const nextPerf = dayPerformances[idx + 1];
-                        const walkingTime = parseInt(getWalkingTime(performance.stage, nextPerf.stage));
-                        totalWalkingTime += walkingTime;
+                        
+                        // 次のアクトまでの時間を計算
+                        const [endHour, endMin] = performance.end_time.split(':').map(Number);
+                        const [nextStartHour, nextStartMin] = nextPerf.start_time.split(':').map(Number);
+                        
+                        // 分単位に変換（深夜時間の考慮）
+                        const endMinutes = (endHour >= 0 && endHour < 6 ? endHour + 24 : endHour) * 60 + endMin;
+                        const nextStartMinutes = (nextStartHour >= 0 && nextStartHour < 6 ? nextStartHour + 24 : nextStartHour) * 60 + nextStartMin;
+                        const timeBetween = nextStartMinutes - endMinutes;
+                        
+                        // 60分以内の場合のみカウント
+                        if (timeBetween <= 60) {
+                          const walkingTime = parseInt(getWalkingTime(performance.stage, nextPerf.stage));
+                          totalWalkingTime += walkingTime;
+                        }
                       }
                     });
                     
@@ -345,87 +504,135 @@ export default function TimetableView() {
                           let movementInfo = null;
                           if (idx < dayPerformances.length - 1) {
                             const nextPerf = dayPerformances[idx + 1];
-                            const walkingTime = getWalkingTime(performance.stage, nextPerf.stage);
-                            const isSameStage = performance.stage === nextPerf.stage;
                             
-                            const isHardRoute = 
-                              (performance.stage === 'RED MARQUEE' && nextPerf.stage === 'FIELD OF HEAVEN') ||
-                              (performance.stage === 'FIELD OF HEAVEN' && nextPerf.stage === 'RED MARQUEE');
+                            // 次のアクトまでの時間を計算
+                            const [endHour, endMin] = performance.end_time.split(':').map(Number);
+                            const [nextStartHour, nextStartMin] = nextPerf.start_time.split(':').map(Number);
                             
-                            const isMediumRoute = 
-                              (performance.stage === 'WHITE STAGE' && nextPerf.stage === 'RED MARQUEE') ||
-                              (performance.stage === 'RED MARQUEE' && nextPerf.stage === 'WHITE STAGE') ||
-                              (performance.stage === 'FIELD OF HEAVEN' && nextPerf.stage === 'GREEN STAGE') ||
-                              (performance.stage === 'GREEN STAGE' && nextPerf.stage === 'FIELD OF HEAVEN');
+                            // 分単位に変換（深夜時間の考慮）
+                            const endMinutes = (endHour >= 0 && endHour < 6 ? endHour + 24 : endHour) * 60 + endMin;
+                            const nextStartMinutes = (nextStartHour >= 0 && nextStartHour < 6 ? nextStartHour + 24 : nextStartHour) * 60 + nextStartMin;
+                            const timeBetween = nextStartMinutes - endMinutes;
                             
-                            const isNiceRoute = 
-                              (performance.stage === 'GREEN STAGE' && nextPerf.stage === 'WHITE STAGE') ||
-                              (performance.stage === 'WHITE STAGE' && nextPerf.stage === 'GREEN STAGE');
-                            
-                            const isEasyRoute = 
-                              (performance.stage === 'GREEN STAGE' && nextPerf.stage === 'RED MARQUEE') ||
-                              (performance.stage === 'RED MARQUEE' && nextPerf.stage === 'GREEN STAGE');
-                            
-                            const isNormalRoute = 
-                              (performance.stage === 'FIELD OF HEAVEN' && nextPerf.stage === 'WHITE STAGE') ||
-                              (performance.stage === 'WHITE STAGE' && nextPerf.stage === 'FIELD OF HEAVEN');
-                            
-                            movementInfo = (
-                              <div className="mt-2 flex items-center gap-2 text-sm">
-                                <span className="font-bold">↓</span>
-                                {isSameStage ? (
-                                  <div className="flex items-center gap-2 text-blue-500 font-semibold">
-                                    <span>同じステージ</span>
-                                    <span>🏝️</span>
-                                    <span className="text-xs">ゆっくり楽しめる〜</span>
+                            // 0分後で同じステージの場合、または1分以上の場合に時間情報を表示
+                            if (timeBetween >= 0) {
+                              const isSameStage = performance.stage === nextPerf.stage;
+                              
+                              // 0分後の場合は特別表示
+                              if (timeBetween === 0) {
+                                if (isSameStage) {
+                                  // 同じステージの場合
+                                  movementInfo = (
+                                    <div className="mt-2 flex items-center gap-2 text-sm">
+                                      <span className="font-bold">↓</span>
+                                      <span className="text-xs text-muted-foreground">（連続）</span>
+                                      <div className="flex items-center gap-2 text-blue-500 font-semibold">
+                                        <span>同じステージ</span>
+                                        <span>🏝️</span>
+                                        <span className="text-xs">ゆっくりできるね〜</span>
+                                      </div>
+                                    </div>
+                                  );
+                                } else {
+                                  // 別のステージの場合
+                                  const walkingTime = getWalkingTime(performance.stage, nextPerf.stage);
+                                  movementInfo = (
+                                    <div className="mt-2 flex items-center gap-2 text-sm">
+                                      <span className="font-bold">↓</span>
+                                      <span className="text-xs text-red-500 font-bold">（0分後）</span>
+                                      <div className="flex items-center gap-2 text-red-500 font-bold">
+                                        <span>🏃‍♂️💨</span>
+                                        <span>急げ！</span>
+                                        <span className="text-xs">（移動時間: {walkingTime}分）</span>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+                              } else if (timeBetween > 0) {
+                                // 1分以上の場合は移動時間も表示（時間間隔に関わらず）
+                                const walkingTime = getWalkingTime(performance.stage, nextPerf.stage);
+                                
+                                const isHardRoute = 
+                                  (performance.stage === 'RED MARQUEE' && nextPerf.stage === 'FIELD OF HEAVEN') ||
+                                  (performance.stage === 'FIELD OF HEAVEN' && nextPerf.stage === 'RED MARQUEE');
+                                
+                                const isMediumRoute = 
+                                  (performance.stage === 'WHITE STAGE' && nextPerf.stage === 'RED MARQUEE') ||
+                                  (performance.stage === 'RED MARQUEE' && nextPerf.stage === 'WHITE STAGE') ||
+                                  (performance.stage === 'FIELD OF HEAVEN' && nextPerf.stage === 'GREEN STAGE') ||
+                                  (performance.stage === 'GREEN STAGE' && nextPerf.stage === 'FIELD OF HEAVEN');
+                                
+                                const isNiceRoute = 
+                                  (performance.stage === 'GREEN STAGE' && nextPerf.stage === 'WHITE STAGE') ||
+                                  (performance.stage === 'WHITE STAGE' && nextPerf.stage === 'GREEN STAGE');
+                                
+                                const isEasyRoute = 
+                                  (performance.stage === 'GREEN STAGE' && nextPerf.stage === 'RED MARQUEE') ||
+                                  (performance.stage === 'RED MARQUEE' && nextPerf.stage === 'GREEN STAGE');
+                                
+                                const isNormalRoute = 
+                                  (performance.stage === 'FIELD OF HEAVEN' && nextPerf.stage === 'WHITE STAGE') ||
+                                  (performance.stage === 'WHITE STAGE' && nextPerf.stage === 'FIELD OF HEAVEN');
+                                
+                                movementInfo = (
+                                  <div className="mt-2 flex items-center gap-2 text-sm">
+                                    <span className="font-bold">↓</span>
+                                    <span className="text-xs text-muted-foreground">（{timeBetween}分後）</span>
+                                    {isSameStage ? (
+                                      <div className="flex items-center gap-2 text-blue-500 font-semibold">
+                                        <span>同じステージ</span>
+                                        <span>🏝️</span>
+                                        <span className="text-xs">ゆっくり楽しめる〜</span>
+                                      </div>
+                                    ) : (
+                                      <div className={`flex items-center gap-2 ${
+                                        isHardRoute ? 'text-orange-600 font-semibold' : 
+                                        isMediumRoute ? 'text-yellow-600 font-semibold' : 
+                                        isNiceRoute ? 'text-green-600 font-semibold' :
+                                        isEasyRoute ? 'text-blue-600 font-semibold' :
+                                        isNormalRoute ? 'text-gray-600 font-medium' :
+                                        'text-muted-foreground'
+                                      }`}>
+                                        <span>移動時間: {walkingTime}分</span>
+                                        {isHardRoute && (
+                                          <>
+                                            <span className="text-orange-600">🥵</span>
+                                            <span className="text-xs">きついぜぇ〜</span>
+                                          </>
+                                        )}
+                                        {isMediumRoute && (
+                                          <>
+                                            <span className="text-yellow-600">😅</span>
+                                            <span className="text-xs">まあまあきつい</span>
+                                          </>
+                                        )}
+                                        {isNiceRoute && (
+                                          <>
+                                            <span className="text-green-600">🚶</span>
+                                            <span className="text-xs">適度な運動だね！</span>
+                                          </>
+                                        )}
+                                        {isEasyRoute && (
+                                          <>
+                                            <span className="text-blue-600">😎</span>
+                                            <span className="text-xs">楽勝！</span>
+                                          </>
+                                        )}
+                                        {isNormalRoute && (
+                                          <>
+                                            <span className="text-gray-600">🤷</span>
+                                            <span className="text-xs">まあ普通</span>
+                                          </>
+                                        )}
+                                        {parseInt(walkingTime) >= 15 && !isHardRoute && !isMediumRoute && (
+                                          <span className="text-yellow-600">⚠️</span>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
-                                ) : (
-                                  <div className={`flex items-center gap-2 ${
-                                    isHardRoute ? 'text-orange-600 font-semibold' : 
-                                    isMediumRoute ? 'text-yellow-600 font-semibold' : 
-                                    isNiceRoute ? 'text-green-600 font-semibold' :
-                                    isEasyRoute ? 'text-blue-600 font-semibold' :
-                                    isNormalRoute ? 'text-gray-600 font-medium' :
-                                    'text-muted-foreground'
-                                  }`}>
-                                    <span>移動時間: {walkingTime}分</span>
-                                    {isHardRoute && (
-                                      <>
-                                        <span className="text-orange-600">🥵</span>
-                                        <span className="text-xs">きついぜぇ〜</span>
-                                      </>
-                                    )}
-                                    {isMediumRoute && (
-                                      <>
-                                        <span className="text-yellow-600">😅</span>
-                                        <span className="text-xs">まあまあきつい</span>
-                                      </>
-                                    )}
-                                    {isNiceRoute && (
-                                      <>
-                                        <span className="text-green-600">🚶</span>
-                                        <span className="text-xs">適度な運動だね！</span>
-                                      </>
-                                    )}
-                                    {isEasyRoute && (
-                                      <>
-                                        <span className="text-blue-600">😎</span>
-                                        <span className="text-xs">楽勝！</span>
-                                      </>
-                                    )}
-                                    {isNormalRoute && (
-                                      <>
-                                        <span className="text-gray-600">🤷</span>
-                                        <span className="text-xs">まあ普通</span>
-                                      </>
-                                    )}
-                                    {parseInt(walkingTime) >= 15 && !isHardRoute && !isMediumRoute && (
-                                      <span className="text-yellow-600">⚠️</span>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            );
+                                );
+                              }
+                            }
                           }
                           
                           return (
@@ -470,7 +677,8 @@ export default function TimetableView() {
               </>
             )}
           </div>
-        )}
+          )}
+        </div>
 
       </div>
     </div>

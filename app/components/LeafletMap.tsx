@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Performance, TimetableData } from '../types';
+import LoadingSpinner from './LoadingSpinner';
 
 interface StagePosition {
   id: string;
@@ -358,18 +359,26 @@ export default function LeafletMap({ myTimetable, timetableData, selectedDay }: 
     }
   }, [map, L, myTimetable, timetableData, selectedDay, isMounted]);
 
-  if (!isMounted) {
+  if (!isMounted || !isLoaded) {
     return (
-      <div className="h-[300px] sm:h-[400px] lg:h-[500px] border border-border rounded overflow-hidden flex items-center justify-center">
-        <p className="text-muted-foreground">初期化中...</p>
-      </div>
-    );
-  }
-
-  if (!isLoaded) {
-    return (
-      <div className="h-[300px] sm:h-[400px] lg:h-[500px] border border-border rounded overflow-hidden flex items-center justify-center">
-        <p className="text-muted-foreground">マップを読み込み中...</p>
+      <div className="h-[300px] sm:h-[400px] lg:h-[500px] border border-border rounded overflow-hidden flex items-center justify-center bg-gradient-to-br from-background to-muted/20">
+        <div className="text-center">
+          <LoadingSpinner size="lg" message={!isMounted ? "初期化中..." : "マップを読み込み中..."} />
+          <div className="mt-4 space-y-2">
+            <div className="flex items-center justify-center gap-2">
+              <div className="w-3 h-3 bg-green-600 rounded-full animate-pulse"></div>
+              <span className="text-xs text-muted-foreground">GREEN STAGE</span>
+            </div>
+            <div className="flex items-center justify-center gap-2">
+              <div className="w-3 h-3 bg-red-600 rounded-full animate-pulse delay-75"></div>
+              <span className="text-xs text-muted-foreground">RED MARQUEE</span>
+            </div>
+            <div className="flex items-center justify-center gap-2">
+              <div className="w-3 h-3 bg-blue-600 rounded-full animate-pulse delay-150"></div>
+              <span className="text-xs text-muted-foreground">FIELD OF HEAVEN</span>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
