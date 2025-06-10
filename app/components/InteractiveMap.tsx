@@ -8,7 +8,7 @@ import { TimetableData } from '../types';
 const LeafletMap = dynamic(() => import('./LeafletMap'), {
   ssr: false,
   loading: () => (
-    <div className="h-[500px] border border-border rounded overflow-hidden flex items-center justify-center">
+    <div className="h-[300px] sm:h-[400px] lg:h-[500px] border border-border rounded overflow-hidden flex items-center justify-center">
       <p className="text-muted-foreground">マップを読み込み中...</p>
     </div>
   )
@@ -21,5 +21,9 @@ interface InteractiveMapProps {
 }
 
 export default function InteractiveMap({ myTimetable, timetableData, selectedDay }: InteractiveMapProps) {
-  return <LeafletMap myTimetable={myTimetable} timetableData={timetableData} selectedDay={selectedDay} />;
+  return (
+    <div className="w-full">
+      <LeafletMap myTimetable={myTimetable} timetableData={timetableData} selectedDay={selectedDay} />
+    </div>
+  );
 }

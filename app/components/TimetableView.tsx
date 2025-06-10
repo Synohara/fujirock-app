@@ -7,8 +7,15 @@ import TimelineView from './TimelineView';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, MapPin, Calendar, Download } from 'lucide-react';
+import React from 'react';
+import { Search, MapPin, Calendar, Download, Menu, X, Star } from 'lucide-react';
 
+const STAGE_COLORS = {
+  'GREEN STAGE': 'bg-green-600 text-white',
+  'WHITE STAGE': 'bg-gray-200 text-gray-900',
+  'RED MARQUEE': 'bg-red-600 text-white',
+  'FIELD OF HEAVEN': 'bg-blue-600 text-white'
+};
 
 export default function TimetableView() {
   const [timetableData, setTimetableData] = useState<TimetableData | null>(null);
@@ -22,7 +29,7 @@ export default function TimetableView() {
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStage, setSelectedStage] = useState<string>('all');
-  const [viewMode, setViewMode] = useState<'timetable' | 'map'>('timetable');
+  const [viewMode, setViewMode] = useState<'timetable' | 'map' | 'mytimetable'>('timetable');
 
   useEffect(() => {
     fetch('/timetable.json')
@@ -42,7 +49,18 @@ export default function TimetableView() {
   }
 
   const dayPerformances = timetableData.performances
-    .filter(p => p.day === selectedDay)
+    .filter(p => {
+      // 選択された日のパフォーマンス
+      if (p.day === selectedDay) return true;
+      
+      // 翌日の深夜パフォーマンス（0-5時）を前日の延長として含める
+      if (p.day === selectedDay + 1) {
+        const [hour] = p.start_time.split(':').map(Number);
+        return hour >= 0 && hour < 6;
+      }
+      
+      return false;
+    })
     .filter(p => selectedStage === 'all' || p.stage === selectedStage)
     .filter(p => searchQuery === '' || p.artist.toLowerCase().includes(searchQuery.toLowerCase()));
   
@@ -69,6 +87,36 @@ export default function TimetableView() {
     return (start1 < end2 && end1 > start2);
   };
 
+  const getWalkingTime = (fromStage: string, toStage: string): string => {
+    if (fromStage === toStage) return "0";
+    
+    // 公式移動時間表に基づく正確な時間
+    const times: Record<string, Record<string, string>> = {
+      'GREEN STAGE': {
+        'WHITE STAGE': '10',
+        'RED MARQUEE': '4', 
+        'FIELD OF HEAVEN': '15'
+      },
+      'WHITE STAGE': {
+        'GREEN STAGE': '10',
+        'RED MARQUEE': '14',
+        'FIELD OF HEAVEN': '5'
+      },
+      'RED MARQUEE': {
+        'GREEN STAGE': '4',
+        'WHITE STAGE': '14', 
+        'FIELD OF HEAVEN': '19'
+      },
+      'FIELD OF HEAVEN': {
+        'GREEN STAGE': '15',
+        'WHITE STAGE': '5',
+        'RED MARQUEE': '19'
+      }
+    };
+    
+    return times[fromStage]?.[toStage] || '10';
+  };
+
 
 
   const exportTimetable = () => {
@@ -77,7 +125,14 @@ export default function TimetableView() {
       .filter((p): p is Performance => p !== undefined)
       .sort((a, b) => {
         if (a.day !== b.day) return a.day - b.day;
-        return a.start_time.localeCompare(b.start_time);
+        
+        // 時間を数値に変換（深夜時間0-5時は24+時間として扱う）
+        const getTimeValue = (timeStr: string) => {
+          const [hour, minute] = timeStr.split(':').map(Number);
+          return hour >= 0 && hour < 6 ? (hour + 24) * 60 + minute : hour * 60 + minute;
+        };
+        
+        return getTimeValue(a.start_time) - getTimeValue(b.start_time);
       });
 
     let exportText = "FUJI ROCK FESTIVAL 2025 - My Timetable\n";
@@ -105,12 +160,14 @@ export default function TimetableView() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex">
+    <div className="min-h-screen bg-background text-foreground">
       {/* メインコンテンツ */}
-      <div className="flex-1 container mx-auto px-4 py-4 sm:py-8">
-        <h1 className="text-2xl sm:text-4xl font-bold mb-6 sm:mb-8 text-center text-primary">
-          FUJI ROCK FESTIVAL 2025
-        </h1>
+      <div className="container mx-auto px-4 py-4 sm:py-8 max-w-7xl">
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-4xl font-bold text-primary text-center">
+            FUJI ROCK FESTIVAL 2025
+          </h1>
+        </div>
         
         <Tabs value={selectedDay.toString()} onValueChange={(v) => setSelectedDay(Number(v))} className="w-full mb-8">
           <TabsList className="grid w-full max-w-md mx-auto grid-cols-3 bg-card/50 backdrop-blur border border-border">
@@ -126,8 +183,8 @@ export default function TimetableView() {
           </TabsList>
         </Tabs>
 
-        <Card className="p-4 mb-6 max-w-4xl mx-auto bg-card/80 backdrop-blur border-border">
-          <div className="flex flex-col md:flex-row gap-4">
+        <Card className="p-4 mb-6 mx-auto bg-card/80 backdrop-blur border-border">
+          <div className="flex flex-col sm:flex-row gap-4">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               <input
@@ -151,7 +208,7 @@ export default function TimetableView() {
           </div>
         </Card>
 
-        <div className="flex justify-center mb-6 gap-4">
+        <div className="flex flex-col sm:flex-row justify-center mb-6 gap-4">
           <Button
             onClick={() => setViewMode('timetable')}
             variant={viewMode === 'timetable' ? 'default' : 'outline'}
@@ -159,6 +216,19 @@ export default function TimetableView() {
           >
             <Calendar className="mr-2 h-4 w-4" />
             タイムテーブル
+          </Button>
+          <Button
+            onClick={() => setViewMode('mytimetable')}
+            variant={viewMode === 'mytimetable' ? 'default' : 'outline'}
+            className={viewMode === 'mytimetable' ? 'bg-gradient-to-r from-yellow-400 to-orange-500 text-black' : ''}
+          >
+            <Star className="mr-2 h-4 w-4" />
+            My Timetable
+            {myTimetable.length > 0 && (
+              <span className="ml-2 bg-white/20 px-2 py-0.5 rounded-full text-xs">
+                {myTimetable.length}
+              </span>
+            )}
           </Button>
           <Button
             onClick={() => setViewMode('map')}
@@ -171,173 +241,249 @@ export default function TimetableView() {
         </div>
 
 
-        {viewMode === 'timetable' ? (
+        {viewMode === 'timetable' && (
           <TimelineView 
             performances={dayPerformances}
             stages={stages}
             myTimetable={myTimetable}
             toggleMyTimetable={toggleMyTimetable}
           />
-        ) : (
+        )}
+        
+        {viewMode === 'map' && (
           <MapView 
             myTimetable={myTimetable}
             timetableData={timetableData}
             selectedDay={selectedDay}
           />
         )}
-
-      </div>
-
-      {/* 右サイドバー - My Timetable */}
-      {myTimetable.length > 0 && (
-        <div className="w-80 bg-card/80 backdrop-blur p-4 overflow-y-auto border-l border-border">
-          <div className="sticky top-0 bg-card pb-2 mb-4">
-            <h3 className="text-xl font-bold flex justify-between items-center">
-              My Timetable
+        
+        {viewMode === 'mytimetable' && (
+          <div className="bg-card rounded-lg p-4 sm:p-6 border border-border">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl sm:text-2xl font-bold text-foreground">My Timetable</h3>
               <Button
                 onClick={() => exportTimetable()}
                 size="sm"
                 variant="outline"
-                className="text-xs"
               >
-                <Download className="h-3 w-3 mr-1" />
+                <Download className="h-4 w-4 mr-2" />
                 Export
               </Button>
-            </h3>
-            <div className="text-xs text-muted-foreground mt-1">
-              選択: {myTimetable.length}件
             </div>
-          </div>
-          <div className="space-y-2">
-            {(() => {
-              const dayPerformances = myTimetable
-                .map(id => {
-                  const performance = timetableData?.performances.find(p => p.id === id);
-                  if (!performance || performance.day !== selectedDay) return null;
-                  return { id, performance };
-                })
-                .filter(item => item !== null)
-                .sort((a, b) => a!.performance.start_time.localeCompare(b!.performance.start_time));
-
-              if (dayPerformances.length === 0) {
-                return <p className="text-sm text-muted-foreground">Day {selectedDay} に選択されたアーティストはありません</p>;
-              }
-
-              // 時間軸表示用の時間帯生成
-              const timeSlots: string[] = [];
-              for (let hour = 10; hour < 24; hour++) {
-                timeSlots.push(`${hour}:00`);
-              }
-              for (let hour = 0; hour < 6; hour++) {
-                timeSlots.push(`${hour.toString().padStart(2, '0')}:00`);
-              }
-
-              // 時間重複チェック
-              const checkTimeOverlap = (perf1: Performance, perf2: Performance): boolean => {
-                const start1 = new Date(`2025-07-${24 + perf1.day} ${perf1.start_time}`);
-                const end1 = new Date(`2025-07-${24 + perf1.day} ${perf1.end_time}`);
-                const start2 = new Date(`2025-07-${24 + perf2.day} ${perf2.start_time}`);
-                const end2 = new Date(`2025-07-${24 + perf2.day} ${perf2.end_time}`);
-                
-                return (start1 < end2 && end1 > start2);
-              };
-
-              // パフォーマンスの位置計算（重複を考慮）
-              const getPerformancePosition = (performance: Performance, allPerformances: Performance[]) => {
-                const [startHour, startMin] = performance.start_time.split(':').map(Number);
-                const [endHour, endMin] = performance.end_time.split(':').map(Number);
-                
-                const startMinutes = (startHour >= 10 ? startHour - 10 : startHour + 14) * 60 + startMin;
-                const endMinutes = (endHour >= 10 ? endHour - 10 : endHour + 14) * 60 + endMin;
-                
-                const top = (startMinutes / 60) * 50; // 1時間 = 50px (間隔拡大)
-                const height = Math.max(((endMinutes - startMinutes) / 60) * 50, 30); // 最小30px
-                
-                // 重複するパフォーマンスを見つける
-                const overlapping = allPerformances.filter(p => 
-                  p.id !== performance.id && checkTimeOverlap(performance, p)
-                );
-                
-                // 重複がある場合の配置計算
-                let leftOffset = 0;
-                let width = 100;
-                
-                if (overlapping.length > 0) {
-                  // 重複するパフォーマンスのインデックスを取得
-                  const allOverlapping = [performance, ...overlapping].sort((a, b) => 
-                    a.start_time.localeCompare(b.start_time) || a.id.localeCompare(b.id)
-                  );
-                  const index = allOverlapping.findIndex(p => p.id === performance.id);
-                  const totalCount = allOverlapping.length;
-                  
-                  width = 100 / totalCount;
-                  leftOffset = (index * width);
-                }
-                
-                return { top, height, leftOffset, width };
-              };
-
-              return (
-                <>
-                  <h4 className="text-sm font-semibold text-primary mb-3">Day {selectedDay} (7/{24 + selectedDay})</h4>
-                  <div className="relative bg-card/50 rounded-lg p-2" style={{ height: `${timeSlots.length * 50}px` }}>
-                    {/* 時間軸の背景線 */}
-                    {timeSlots.map((time, idx) => (
-                      <div key={time} className="absolute w-full flex items-center" style={{ top: `${idx * 50}px`, height: '50px' }}>
-                        <div className="text-xs text-muted-foreground w-12 flex-shrink-0">{time}</div>
-                        <div className="flex-1 h-px bg-border ml-2"></div>
-                      </div>
-                    ))}
-                    
-                    {/* パフォーマンス */}
-                    {dayPerformances.map(item => {
-                      const { id, performance } = item!;
-                      const allDayPerformances = dayPerformances.map(item => item!.performance);
-                      const { top, height, leftOffset, width } = getPerformancePosition(performance, allDayPerformances);
-                      const conflicts = myTimetable.filter(otherId => {
-                        if (otherId === id) return false;
-                        const otherPerf = timetableData?.performances.find(p => p.id === otherId);
-                        return otherPerf && checkTimeConflict(performance, otherPerf);
-                      });
+            
+            {myTimetable.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">
+                タイムテーブルからアーティストを選択してください
+              </p>
+            ) : (
+              <>
+                <Tabs value={selectedDay.toString()} onValueChange={(v) => setSelectedDay(Number(v))} className="w-full">
+                  <TabsList className="grid w-full grid-cols-3 mb-4">
+                    {[1, 2, 3].map(day => {
+                      const dayCount = myTimetable
+                        .map(id => timetableData?.performances.find(p => p.id === id))
+                        .filter((p): p is Performance => p !== undefined && p.day === day).length;
                       
                       return (
-                        <div 
-                          key={id} 
-                          className={`absolute px-1 py-1 rounded text-xs overflow-visible border ${
-                            conflicts.length > 0 
-                              ? 'bg-red-100 border-red-300 text-red-800' 
-                              : 'bg-primary/90 border-primary text-primary-foreground'
-                          }`}
-                          style={{ 
-                            top: `${top}px`, 
-                            height: `${height}px`,
-                            left: `${56 + (leftOffset * (320 - 56 - 32) / 100)}px`,
-                            width: `${(320 - 56 - 32) * width / 100 - 4}px`,
-                            zIndex: conflicts.length > 0 ? 20 : 10,
-                            marginRight: '2px'
-                          }}
+                        <TabsTrigger
+                          key={day}
+                          value={day.toString()}
+                          className="relative"
                         >
-                          <div className="font-semibold text-xs leading-tight" style={{ fontSize: '10px' }}>
-                            {performance.artist}
-                          </div>
-                          <div className="opacity-75 leading-tight" style={{ fontSize: '9px' }}>
-                            {performance.stage}
-                          </div>
-                          {conflicts.length > 0 && (
-                            <div className="text-red-600 leading-tight" style={{ fontSize: '8px' }}>
-                              ⚠️重複
-                            </div>
+                          Day {day}
+                          {dayCount > 0 && (
+                            <span className="ml-2 text-xs bg-muted px-1.5 py-0.5 rounded-full">
+                              {dayCount}
+                            </span>
                           )}
-                        </div>
+                        </TabsTrigger>
                       );
                     })}
-                  </div>
-                </>
-              );
-            })()}
+                  </TabsList>
+                </Tabs>
+                
+                <div className="mt-4">
+                  {(() => {
+                    const dayPerformances = myTimetable
+                      .map(id => timetableData?.performances.find(p => p.id === id))
+                      .filter((p): p is Performance => p !== undefined && p.day === selectedDay)
+                      .sort((a, b) => {
+                        const getTimeValue = (timeStr: string) => {
+                          const [hour, minute] = timeStr.split(':').map(Number);
+                          return hour >= 0 && hour < 6 ? (hour + 24) * 60 + minute : hour * 60 + minute;
+                        };
+                        return getTimeValue(a.start_time) - getTimeValue(b.start_time);
+                      });
+                    
+                    if (dayPerformances.length === 0) {
+                      return (
+                        <p className="text-center text-muted-foreground py-8">
+                          Day {selectedDay} に選択されたアーティストはありません
+                        </p>
+                      );
+                    }
+                    
+                    // 総移動時間を計算
+                    let totalWalkingTime = 0;
+                    dayPerformances.forEach((performance, idx) => {
+                      if (idx < dayPerformances.length - 1) {
+                        const nextPerf = dayPerformances[idx + 1];
+                        const walkingTime = parseInt(getWalkingTime(performance.stage, nextPerf.stage));
+                        totalWalkingTime += walkingTime;
+                      }
+                    });
+                    
+                    return (
+                      <div>
+                        {totalWalkingTime > 0 && (
+                          <div className="mb-4 p-3 bg-muted/50 rounded-lg border border-border">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium">Day {selectedDay} の総移動時間</span>
+                              <span className="text-lg font-bold text-primary">{totalWalkingTime}分</span>
+                            </div>
+                          </div>
+                        )}
+                        <div className="space-y-2">
+                        {dayPerformances.map((performance, idx) => {
+                          const conflicts = myTimetable.filter(otherId => {
+                            if (otherId === performance.id) return false;
+                            const otherPerf = timetableData?.performances.find(p => p.id === otherId);
+                            return otherPerf && checkTimeConflict(performance, otherPerf);
+                          });
+                          
+                          // 次のパフォーマンスとの移動時間
+                          let movementInfo = null;
+                          if (idx < dayPerformances.length - 1) {
+                            const nextPerf = dayPerformances[idx + 1];
+                            const walkingTime = getWalkingTime(performance.stage, nextPerf.stage);
+                            const isSameStage = performance.stage === nextPerf.stage;
+                            
+                            const isHardRoute = 
+                              (performance.stage === 'RED MARQUEE' && nextPerf.stage === 'FIELD OF HEAVEN') ||
+                              (performance.stage === 'FIELD OF HEAVEN' && nextPerf.stage === 'RED MARQUEE');
+                            
+                            const isMediumRoute = 
+                              (performance.stage === 'WHITE STAGE' && nextPerf.stage === 'RED MARQUEE') ||
+                              (performance.stage === 'RED MARQUEE' && nextPerf.stage === 'WHITE STAGE') ||
+                              (performance.stage === 'FIELD OF HEAVEN' && nextPerf.stage === 'GREEN STAGE') ||
+                              (performance.stage === 'GREEN STAGE' && nextPerf.stage === 'FIELD OF HEAVEN');
+                            
+                            const isNiceRoute = 
+                              (performance.stage === 'GREEN STAGE' && nextPerf.stage === 'WHITE STAGE') ||
+                              (performance.stage === 'WHITE STAGE' && nextPerf.stage === 'GREEN STAGE');
+                            
+                            const isEasyRoute = 
+                              (performance.stage === 'GREEN STAGE' && nextPerf.stage === 'RED MARQUEE') ||
+                              (performance.stage === 'RED MARQUEE' && nextPerf.stage === 'GREEN STAGE');
+                            
+                            const isNormalRoute = 
+                              (performance.stage === 'FIELD OF HEAVEN' && nextPerf.stage === 'WHITE STAGE') ||
+                              (performance.stage === 'WHITE STAGE' && nextPerf.stage === 'FIELD OF HEAVEN');
+                            
+                            movementInfo = (
+                              <div className="mt-2 flex items-center gap-2 text-sm">
+                                <span className="font-bold">↓</span>
+                                {isSameStage ? (
+                                  <div className="flex items-center gap-2 text-blue-500 font-semibold">
+                                    <span>同じステージ</span>
+                                    <span>🏝️</span>
+                                    <span className="text-xs">ゆっくり楽しめる〜</span>
+                                  </div>
+                                ) : (
+                                  <div className={`flex items-center gap-2 ${
+                                    isHardRoute ? 'text-orange-600 font-semibold' : 
+                                    isMediumRoute ? 'text-yellow-600 font-semibold' : 
+                                    isNiceRoute ? 'text-green-600 font-semibold' :
+                                    isEasyRoute ? 'text-blue-600 font-semibold' :
+                                    isNormalRoute ? 'text-gray-600 font-medium' :
+                                    'text-muted-foreground'
+                                  }`}>
+                                    <span>移動時間: {walkingTime}分</span>
+                                    {isHardRoute && (
+                                      <>
+                                        <span className="text-orange-600">🥵</span>
+                                        <span className="text-xs">きついぜぇ〜</span>
+                                      </>
+                                    )}
+                                    {isMediumRoute && (
+                                      <>
+                                        <span className="text-yellow-600">😅</span>
+                                        <span className="text-xs">まあまあきつい</span>
+                                      </>
+                                    )}
+                                    {isNiceRoute && (
+                                      <>
+                                        <span className="text-green-600">🚶</span>
+                                        <span className="text-xs">適度な運動だね！</span>
+                                      </>
+                                    )}
+                                    {isEasyRoute && (
+                                      <>
+                                        <span className="text-blue-600">😎</span>
+                                        <span className="text-xs">楽勝！</span>
+                                      </>
+                                    )}
+                                    {isNormalRoute && (
+                                      <>
+                                        <span className="text-gray-600">🤷</span>
+                                        <span className="text-xs">まあ普通</span>
+                                      </>
+                                    )}
+                                    {parseInt(walkingTime) >= 15 && !isHardRoute && !isMediumRoute && (
+                                      <span className="text-yellow-600">⚠️</span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+                          
+                          return (
+                            <div key={performance.id} className="space-y-1">
+                              <Card className={`p-3 ${conflicts.length > 0 ? 'border-red-500 bg-red-50' : ''}`}>
+                                <div className="flex justify-between items-start">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm font-semibold">{performance.start_time} - {performance.end_time}</span>
+                                      <span className={`text-xs px-2 py-0.5 rounded ${
+                                        STAGE_COLORS[performance.stage as keyof typeof STAGE_COLORS] || 'bg-gray-600'
+                                      }`}>
+                                        {performance.stage}
+                                      </span>
+                                    </div>
+                                    <div className="font-bold text-lg mt-1">{performance.artist}</div>
+                                    {conflicts.length > 0 && (
+                                      <div className="text-red-600 text-sm mt-1">
+                                        ⚠️ 時間が重複しています
+                                      </div>
+                                    )}
+                                  </div>
+                                  <Button
+                                    onClick={() => toggleMyTimetable(performance.id)}
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-red-600 hover:text-red-700"
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </Card>
+                              {movementInfo}
+                            </div>
+                          );
+                        })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </>
+            )}
           </div>
-        </div>
-      )}
+        )}
+
+      </div>
     </div>
   );
 }

@@ -15,6 +15,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "FUJI ROCK FESTIVAL '25 - タイムテーブル",
   description: "FUJI ROCK FESTIVAL 2025のタイムテーブルを確認して、自分だけのスケジュールを作成しよう",
+  icons: {
+    icon: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({

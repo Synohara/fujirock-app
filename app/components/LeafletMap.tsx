@@ -27,6 +27,35 @@ interface LeafletMapProps {
 }
 
 export default function LeafletMap({ myTimetable, timetableData, selectedDay }: LeafletMapProps) {
+  const getWalkingTime = (fromStage: string, toStage: string): string => {
+    if (fromStage === toStage) return "0";
+    
+    // 公式移動時間表に基づく正確な時間
+    const times: Record<string, Record<string, string>> = {
+      'GREEN STAGE': {
+        'WHITE STAGE': '10',
+        'RED MARQUEE': '4', 
+        'FIELD OF HEAVEN': '15'
+      },
+      'WHITE STAGE': {
+        'GREEN STAGE': '10',
+        'RED MARQUEE': '14',
+        'FIELD OF HEAVEN': '5'
+      },
+      'RED MARQUEE': {
+        'GREEN STAGE': '4',
+        'WHITE STAGE': '14', 
+        'FIELD OF HEAVEN': '19'
+      },
+      'FIELD OF HEAVEN': {
+        'GREEN STAGE': '15',
+        'WHITE STAGE': '5',
+        'RED MARQUEE': '19'
+      }
+    };
+    
+    return times[fromStage]?.[toStage] || '10';
+  };
   const [map, setMap] = useState<L.Map | null>(null);
   const [L, setL] = useState<typeof import('leaflet') | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -124,8 +153,29 @@ export default function LeafletMap({ myTimetable, timetableData, selectedDay }: 
 
     const selectedPerformances = myTimetable
       .map(id => timetableData.performances.find(p => p.id === id))
-      .filter((p): p is Performance => p !== undefined && p.day === selectedDay)
-      .sort((a, b) => a.start_time.localeCompare(b.start_time));
+      .filter((p): p is Performance => {
+        if (!p) return false;
+        
+        // 選択された日のパフォーマンス
+        if (p.day === selectedDay) return true;
+        
+        // 翌日の深夜パフォーマンス（0-5時）を前日の延長として含める
+        if (p.day === selectedDay + 1) {
+          const [hour] = p.start_time.split(':').map(Number);
+          return hour >= 0 && hour < 6;
+        }
+        
+        return false;
+      })
+      .sort((a, b) => {
+        // 時間を数値に変換（深夜時間0-5時は24+時間として扱う）
+        const getTimeValue = (timeStr: string) => {
+          const [hour, minute] = timeStr.split(':').map(Number);
+          return hour >= 0 && hour < 6 ? (hour + 24) * 60 + minute : hour * 60 + minute;
+        };
+        
+        return getTimeValue(a.start_time) - getTimeValue(b.start_time);
+      });
 
     // パフォーマンスをステージ別にグループ化
     const stagePerformances: Record<string, number[]> = {};
@@ -138,30 +188,35 @@ export default function LeafletMap({ myTimetable, timetableData, selectedDay }: 
 
     // ステージマーカーを追加（メインステージ）
     STAGE_POSITIONS.filter(s => s.id !== 'oasis').forEach(stage => {
-      const hasPerformance = selectedPerformances.some(p => p.stage === stage.name);
+      const stagePerfs = selectedPerformances.filter(p => p.stage === stage.name);
+      const hasPerformance = stagePerfs.length > 0;
+      const performanceNumbers = stagePerfs.map(p => selectedPerformances.indexOf(p) + 1);
 
       const icon = L.divIcon({
         html: `
           <div style="
-            background-color: ${hasPerformance ? '#ffcc00' : stage.color};
-            color: ${stage.color === '#ffffff' ? '#000' : '#fff'};
-            border: 3px solid ${hasPerformance ? '#ff6b35' : '#fff'};
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
+            position: relative;
+            background-color: ${hasPerformance ? '#ff6b35' : stage.color};
+            color: ${stage.color === '#ffffff' && !hasPerformance ? '#000' : '#fff'};
+            border: 4px solid ${hasPerformance ? '#ffcc00' : '#fff'};
+            border-radius: 12px;
+            width: ${hasPerformance ? '80px' : '60px'};
+            height: ${hasPerformance ? '60px' : '50px'};
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
             font-weight: bold;
-            font-size: 12px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            font-size: ${hasPerformance ? '14px' : '12px'};
+            box-shadow: 0 4px 8px rgba(0,0,0,0.4);
           ">
-            ${stage.name.split(' ')[0]}
+            <div style="font-size: 14px;">${stage.name.split(' ')[0]}</div>
+            ${hasPerformance ? `<div style="font-size: 18px; font-weight: 900; margin-top: 2px;">${performanceNumbers.join(',')}</div>` : ''}
           </div>
         `,
         className: 'custom-stage-marker',
-        iconSize: [40, 40],
-        iconAnchor: [20, 20]
+        iconSize: hasPerformance ? [80, 60] : [60, 50],
+        iconAnchor: hasPerformance ? [40, 30] : [30, 25]
       });
 
       const marker = L.marker([stage.lat, stage.lng], { icon });
@@ -187,51 +242,42 @@ export default function LeafletMap({ myTimetable, timetableData, selectedDay }: 
       }
     });
 
-    // 個別のパフォーマンスマーカーを追加（時系列順で位置をずらす）
+    // パフォーマンスの時間情報をステージの近くに表示
     selectedPerformances.forEach((perf, index) => {
       const stage = STAGE_POSITIONS.find(s => s.name === perf.stage);
       if (!stage) return;
 
-      // 各ステージの周囲に円形配置するための角度計算
-      const stagePerfs = selectedPerformances.filter(p => p.stage === perf.stage);
-      const stageIndex = stagePerfs.findIndex(p => p.id === perf.id);
-      const totalStagePerfs = stagePerfs.length;
+      // ステージの下に時間情報を配置
+      const offset = 0.0001 + (index * 0.00003); // 約10m + 番号ごとに3m
       
-      // 円形配置のための座標オフセット
-      const radius = 0.0002; // 約20m
-      const angle = (stageIndex * 2 * Math.PI) / Math.max(totalStagePerfs, 4);
-      const offsetLat = radius * Math.cos(angle);
-      const offsetLng = radius * Math.sin(angle);
-
-      const perfIcon = L.divIcon({
+      const timeIcon = L.divIcon({
         html: `
           <div style="
-            background-color: #ff6b35;
-            color: white;
-            border: 2px solid white;
-            border-radius: 50%;
-            width: 24px;
-            height: 24px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            background-color: rgba(255, 255, 255, 0.95);
+            color: #333;
+            border: 2px solid #ff6b35;
+            border-radius: 8px;
+            padding: 4px 8px;
+            font-size: 12px;
             font-weight: bold;
-            font-size: 10px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            white-space: nowrap;
           ">
-            ${index + 1}
+            <span style="color: #ff6b35; font-size: 14px;">${index + 1}</span>
+            <span style="margin: 0 4px;">|</span>
+            ${perf.start_time}
           </div>
         `,
-        className: 'performance-marker',
-        iconSize: [24, 24],
-        iconAnchor: [12, 12]
+        className: 'time-marker',
+        iconSize: [100, 30],
+        iconAnchor: [50, -5] // ステージマーカーの上に配置
       });
 
-      const perfMarker = L.marker([stage.lat + offsetLat, stage.lng + offsetLng], { icon: perfIcon });
+      const timeMarker = L.marker([stage.lat - offset, stage.lng], { icon: timeIcon });
       try {
-        perfMarker.addTo(map);
+        timeMarker.addTo(map);
         
-        perfMarker.bindPopup(`
+        timeMarker.bindPopup(`
           <div class="text-center">
             <h4 class="font-bold text-sm">${index + 1}. ${perf.artist}</h4>
             <p class="text-xs">${perf.start_time} - ${perf.end_time}</p>
@@ -239,50 +285,93 @@ export default function LeafletMap({ myTimetable, timetableData, selectedDay }: 
           </div>
         `);
       } catch (error) {
-        console.error('Performance marker add failed:', error);
+        console.error('Time marker add failed:', error);
         return;
       }
     });
 
-    // 移動経路を追加（個別パフォーマンスマーカーの位置を使用）
+    // 移動経路を追加（移動時間を含む）
     if (selectedPerformances.length > 1) {
-      const path: [number, number][] = [];
-      selectedPerformances.forEach((perf) => {
-        const stage = STAGE_POSITIONS.find(s => s.name === perf.stage);
-        if (!stage) return;
-
-        // 同じロジックでオフセット座標を計算
-        const stagePerfs = selectedPerformances.filter(p => p.stage === perf.stage);
-        const stageIndex = stagePerfs.findIndex(p => p.id === perf.id);
-        const totalStagePerfs = stagePerfs.length;
+      selectedPerformances.forEach((perf, index) => {
+        if (index === selectedPerformances.length - 1) return;
         
-        const radius = 0.0002;
-        const angle = (stageIndex * 2 * Math.PI) / Math.max(totalStagePerfs, 4);
-        const offsetLat = radius * Math.cos(angle);
-        const offsetLng = radius * Math.sin(angle);
-
-        path.push([stage.lat + offsetLat, stage.lng + offsetLng]);
-      });
-
-      if (path.length > 1) {
-        const polyline = L.polyline(path, {
-          color: '#ffcc00',
-          weight: 3,
-          opacity: 0.8,
-          dashArray: '8, 4'
-        });
-        try {
-          polyline.addTo(map);
-        } catch (error) {
-          console.error('Polyline add failed:', error);
+        const currentStage = STAGE_POSITIONS.find(s => s.name === perf.stage);
+        const nextPerf = selectedPerformances[index + 1];
+        const nextStage = STAGE_POSITIONS.find(s => s.name === nextPerf.stage);
+        
+        if (!currentStage || !nextStage) return;
+        
+        // 移動時間を取得
+        const walkingTime = getWalkingTime(perf.stage, nextPerf.stage);
+        const isSameStage = perf.stage === nextPerf.stage;
+        const isHardRoute = 
+          (perf.stage === 'RED MARQUEE' && nextPerf.stage === 'FIELD OF HEAVEN') ||
+          (perf.stage === 'FIELD OF HEAVEN' && nextPerf.stage === 'RED MARQUEE');
+        const isMediumRoute = 
+          (perf.stage === 'WHITE STAGE' && nextPerf.stage === 'RED MARQUEE') ||
+          (perf.stage === 'RED MARQUEE' && nextPerf.stage === 'WHITE STAGE') ||
+          (perf.stage === 'FIELD OF HEAVEN' && nextPerf.stage === 'GREEN STAGE') ||
+          (perf.stage === 'GREEN STAGE' && nextPerf.stage === 'FIELD OF HEAVEN');
+        const isNiceRoute = 
+          (perf.stage === 'GREEN STAGE' && nextPerf.stage === 'WHITE STAGE') ||
+          (perf.stage === 'WHITE STAGE' && nextPerf.stage === 'GREEN STAGE');
+        const isEasyRoute = 
+          (perf.stage === 'GREEN STAGE' && nextPerf.stage === 'RED MARQUEE') ||
+          (perf.stage === 'RED MARQUEE' && nextPerf.stage === 'GREEN STAGE');
+        
+        // 異なるステージ間の移動のみ線を引く
+        if (!isSameStage) {
+          const path: [number, number][] = [
+            [currentStage.lat, currentStage.lng],
+            [nextStage.lat, nextStage.lng]
+          ];
+          
+          const polyline = L.polyline(path, {
+            color: isHardRoute ? '#dc2626' : isMediumRoute ? '#f59e0b' : isNiceRoute ? '#16a34a' : isEasyRoute ? '#2563eb' : '#ff6b35',
+            weight: isHardRoute ? 6 : isMediumRoute ? 5 : isNiceRoute ? 4 : isEasyRoute ? 3 : 4,
+            opacity: isHardRoute ? 0.8 : isMediumRoute ? 0.7 : isNiceRoute ? 0.8 : isEasyRoute ? 0.8 : 0.6,
+            dashArray: isHardRoute ? '5, 10' : isMediumRoute ? '8, 8' : isNiceRoute ? '15, 5' : isEasyRoute ? '20, 3' : '10, 5'
+          });
+          
+          try {
+            polyline.addTo(map);
+            
+            // 線の中央に移動時間を表示
+            const midLat = (currentStage.lat + nextStage.lat) / 2;
+            const midLng = (currentStage.lng + nextStage.lng) / 2;
+            
+            const walkingIcon = L.divIcon({
+              html: `
+                <div style="
+                  background-color: ${isHardRoute ? '#fef3c7' : isMediumRoute ? '#fef3c7' : isNiceRoute ? '#dcfce7' : isEasyRoute ? '#dbeafe' : '#fff'};
+                  color: ${isHardRoute ? '#dc2626' : isMediumRoute ? '#f59e0b' : isNiceRoute ? '#16a34a' : isEasyRoute ? '#2563eb' : '#ff6b35'};
+                  border: 2px solid ${isHardRoute ? '#dc2626' : isMediumRoute ? '#f59e0b' : isNiceRoute ? '#16a34a' : isEasyRoute ? '#2563eb' : '#ff6b35'};
+                  border-radius: 12px;
+                  padding: 4px 8px;
+                  font-size: 12px;
+                  font-weight: bold;
+                  box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+                ">
+                  → ${walkingTime}分${isHardRoute ? ' 🥵' : isMediumRoute ? ' 😅' : isNiceRoute ? ' 🚶' : isEasyRoute ? ' 😎' : ''}
+                </div>
+              `,
+              className: 'walking-time-marker',
+              iconSize: isHardRoute || isMediumRoute || isNiceRoute || isEasyRoute ? [90, 30] : [70, 30],
+              iconAnchor: isHardRoute || isMediumRoute || isNiceRoute || isEasyRoute ? [45, 15] : [35, 15]
+            });
+            
+            L.marker([midLat, midLng], { icon: walkingIcon }).addTo(map);
+          } catch (error) {
+            console.error('Path add failed:', error);
+          }
         }
-      }
+      });
     }
-  }, [map, L, myTimetable, timetableData, selectedDay, isMounted]);
+  }, [map, L, myTimetable, timetableData, selectedDay, isMounted, getWalkingTime]);
 
   if (!isMounted) {
     return (
-      <div className="h-[500px] border border-border rounded overflow-hidden flex items-center justify-center">
+      <div className="h-[300px] sm:h-[400px] lg:h-[500px] border border-border rounded overflow-hidden flex items-center justify-center">
         <p className="text-muted-foreground">初期化中...</p>
       </div>
     );
@@ -290,14 +379,14 @@ export default function LeafletMap({ myTimetable, timetableData, selectedDay }: 
 
   if (!isLoaded) {
     return (
-      <div className="h-[500px] border border-border rounded overflow-hidden flex items-center justify-center">
+      <div className="h-[300px] sm:h-[400px] lg:h-[500px] border border-border rounded overflow-hidden flex items-center justify-center">
         <p className="text-muted-foreground">マップを読み込み中...</p>
       </div>
     );
   }
 
   return (
-    <div className="h-[500px] border border-border rounded overflow-hidden">
+    <div className="h-[300px] sm:h-[400px] lg:h-[500px] border border-border rounded overflow-hidden">
       <div id="leaflet-map-container" style={{ height: '100%', width: '100%' }} />
     </div>
   );
