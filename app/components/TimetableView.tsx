@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import React from 'react';
-import { Search, MapPin, Calendar, Download, Menu, X, Star } from 'lucide-react';
+import { Search, MapPin, Calendar, Download, X, Star } from 'lucide-react';
 
 const STAGE_COLORS = {
   'GREEN STAGE': 'bg-green-600 text-white',

@@ -27,35 +27,6 @@ interface LeafletMapProps {
 }
 
 export default function LeafletMap({ myTimetable, timetableData, selectedDay }: LeafletMapProps) {
-  const getWalkingTime = (fromStage: string, toStage: string): string => {
-    if (fromStage === toStage) return "0";
-    
-    // 公式移動時間表に基づく正確な時間
-    const times: Record<string, Record<string, string>> = {
-      'GREEN STAGE': {
-        'WHITE STAGE': '10',
-        'RED MARQUEE': '4', 
-        'FIELD OF HEAVEN': '15'
-      },
-      'WHITE STAGE': {
-        'GREEN STAGE': '10',
-        'RED MARQUEE': '14',
-        'FIELD OF HEAVEN': '5'
-      },
-      'RED MARQUEE': {
-        'GREEN STAGE': '4',
-        'WHITE STAGE': '14', 
-        'FIELD OF HEAVEN': '19'
-      },
-      'FIELD OF HEAVEN': {
-        'GREEN STAGE': '15',
-        'WHITE STAGE': '5',
-        'RED MARQUEE': '19'
-      }
-    };
-    
-    return times[fromStage]?.[toStage] || '10';
-  };
   const [map, setMap] = useState<L.Map | null>(null);
   const [L, setL] = useState<typeof import('leaflet') | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -143,6 +114,37 @@ export default function LeafletMap({ myTimetable, timetableData, selectedDay }: 
 
   useEffect(() => {
     if (!map || !L || !timetableData || !isMounted) return;
+
+    // getWalkingTime関数をuseEffect内に移動
+    const getWalkingTime = (fromStage: string, toStage: string): string => {
+      if (fromStage === toStage) return "0";
+      
+      // 公式移動時間表に基づく正確な時間
+      const times: Record<string, Record<string, string>> = {
+        'GREEN STAGE': {
+          'WHITE STAGE': '10',
+          'RED MARQUEE': '4', 
+          'FIELD OF HEAVEN': '15'
+        },
+        'WHITE STAGE': {
+          'GREEN STAGE': '10',
+          'RED MARQUEE': '14',
+          'FIELD OF HEAVEN': '5'
+        },
+        'RED MARQUEE': {
+          'GREEN STAGE': '4',
+          'WHITE STAGE': '14', 
+          'FIELD OF HEAVEN': '19'
+        },
+        'FIELD OF HEAVEN': {
+          'GREEN STAGE': '15',
+          'WHITE STAGE': '5',
+          'RED MARQUEE': '19'
+        }
+      };
+      
+      return times[fromStage]?.[toStage] || '10';
+    };
 
     // 既存のマーカーとポリラインをクリア
     map.eachLayer((layer: L.Layer) => {
@@ -367,7 +369,7 @@ export default function LeafletMap({ myTimetable, timetableData, selectedDay }: 
         }
       });
     }
-  }, [map, L, myTimetable, timetableData, selectedDay, isMounted, getWalkingTime]);
+  }, [map, L, myTimetable, timetableData, selectedDay, isMounted]);
 
   if (!isMounted) {
     return (
