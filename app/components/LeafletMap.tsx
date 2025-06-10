@@ -155,20 +155,7 @@ export default function LeafletMap({ myTimetable, timetableData, selectedDay }: 
 
     const selectedPerformances = myTimetable
       .map(id => timetableData.performances.find(p => p.id === id))
-      .filter((p): p is Performance => {
-        if (!p) return false;
-        
-        // 選択された日のパフォーマンス
-        if (p.day === selectedDay) return true;
-        
-        // 翌日の深夜パフォーマンス（0-5時）を前日の延長として含める
-        if (p.day === selectedDay + 1) {
-          const [hour] = p.start_time.split(':').map(Number);
-          return hour >= 0 && hour < 6;
-        }
-        
-        return false;
-      })
+      .filter((p): p is Performance => p !== undefined && p.day === selectedDay)
       .sort((a, b) => {
         // 時間を数値に変換（深夜時間0-5時は24+時間として扱う）
         const getTimeValue = (timeStr: string) => {

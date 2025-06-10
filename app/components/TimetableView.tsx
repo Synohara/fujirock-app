@@ -49,18 +49,7 @@ export default function TimetableView() {
   }
 
   const dayPerformances = timetableData.performances
-    .filter(p => {
-      // 選択された日のパフォーマンス
-      if (p.day === selectedDay) return true;
-      
-      // 翌日の深夜パフォーマンス（0-5時）を前日の延長として含める
-      if (p.day === selectedDay + 1) {
-        const [hour] = p.start_time.split(':').map(Number);
-        return hour >= 0 && hour < 6;
-      }
-      
-      return false;
-    })
+    .filter(p => p.day === selectedDay)
     .filter(p => selectedStage === 'all' || p.stage === selectedStage)
     .filter(p => searchQuery === '' || p.artist.toLowerCase().includes(searchQuery.toLowerCase()));
   
