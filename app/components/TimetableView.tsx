@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import React from 'react';
-import { Search, Calendar, Download, X, Star, Image } from 'lucide-react';
+import { Search, Calendar, X, Star, Image } from 'lucide-react';
 import LoadingSpinner from './LoadingSpinner';
 
 const STAGE_COLORS = {
@@ -34,7 +34,6 @@ export default function TimetableView() {
   const [viewMode, setViewMode] = useState<'timetable' | 'mytimetable'>('timetable');
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
   const [isExportingImage, setIsExportingImage] = useState(false);
 
   useEffect(() => {
@@ -181,56 +180,6 @@ export default function TimetableView() {
     }, 150);
   };
 
-  const exportTimetable = async () => {
-    setIsExporting(true);
-    
-    try {
-      // 少し遅延を追加してローディング状態を表示
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      const selectedPerformances = myTimetable
-        .map(id => timetableData?.performances.find(p => p.id === id))
-        .filter((p): p is Performance => p !== undefined)
-        .sort((a, b) => {
-          if (a.day !== b.day) return a.day - b.day;
-          
-          // 時間を数値に変換（深夜時間0-5時は24+時間として扱う）
-          const getTimeValue = (timeStr: string) => {
-            const [hour, minute] = timeStr.split(':').map(Number);
-            return hour >= 0 && hour < 6 ? (hour + 24) * 60 + minute : hour * 60 + minute;
-          };
-          
-          return getTimeValue(a.start_time) - getTimeValue(b.start_time);
-        });
-
-      let exportText = "FUJI ROCK FESTIVAL 2025 - My Timetable\n";
-      exportText += "==========================================\n\n";
-
-      let currentDay = 0;
-      selectedPerformances.forEach(perf => {
-        if (perf.day !== currentDay) {
-          currentDay = perf.day;
-          exportText += `\nDay ${perf.day} (${perf.date})\n`;
-          exportText += "-------------------\n";
-        }
-        exportText += `${perf.start_time} - ${perf.end_time} | ${perf.artist} @ ${perf.stage}\n`;
-      });
-
-      const blob = new Blob([exportText], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'fujirock2025_mytimetable.txt';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Export failed:', error);
-    } finally {
-      setIsExporting(false);
-    }
-  };
 
   const exportTimetableAsImage = async () => {
     setIsExportingImage(true);
@@ -510,7 +459,7 @@ export default function TimetableView() {
                       <LoadingSpinner size="sm" />
                     </div>
                   ) : (
-                    <Image className="h-4 w-4 mr-2" alt="画像として保存" />
+                    <Image className="h-4 w-4 mr-2" aria-label="画像として保存" />
                   )}
                   {isExportingImage ? '保存中...' : '画像'}
                 </Button>
