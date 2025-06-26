@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import React from 'react';
-import { Search, Calendar, X, Star, Image } from 'lucide-react';
+import { Search, Calendar, X, Star, Share2 } from 'lucide-react';
 import LoadingSpinner from './LoadingSpinner';
 
 const STAGE_COLORS = {
@@ -34,7 +34,7 @@ export default function TimetableView() {
   const [viewMode, setViewMode] = useState<'timetable' | 'mytimetable'>('timetable');
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
-  const [isExportingImage, setIsExportingImage] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
 
   useEffect(() => {
     setIsLoading(true);
@@ -181,8 +181,8 @@ export default function TimetableView() {
   };
 
 
-  const exportTimetableAsImage = async () => {
-    setIsExportingImage(true);
+  const shareMyTimetable = async () => {
+    setIsSharing(true);
     
     try {
       // 選択されたパフォーマンスを取得
@@ -283,9 +283,33 @@ export default function TimetableView() {
         ctx.fillText(performance.stage, 50, y + 50);
       });
 
-      // 画像をダウンロード
-      canvas.toBlob((blob) => {
-        if (blob) {
+      // Canvas を Blob に変換
+      const blob = await new Promise<Blob>((resolve) => {
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+        }, 'image/png');
+      });
+
+      // Web Share API が利用可能かチェック
+      if (navigator.share && navigator.canShare) {
+        const file = new File([blob], `fujirock2025_mytimetable_day${selectedDay}.png`, { type: 'image/png' });
+        
+        // ファイルが共有可能かチェック
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: `FUJI ROCK 2025 My Timetable - Day ${selectedDay}`,
+            text: `FUJI ROCK FESTIVAL 2025のDay ${selectedDay}のタイムテーブルをシェアします！`,
+            files: [file]
+          });
+        } else {
+          // ファイル共有がサポートされていない場合、URLのみ共有
+          await navigator.share({
+            title: `FUJI ROCK 2025 My Timetable - Day ${selectedDay}`,
+            text: `FUJI ROCK FESTIVAL 2025のDay ${selectedDay}のタイムテーブルをシェアします！`,
+            url: window.location.href
+          });
+          
+          // 画像は別途ダウンロード
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
@@ -295,12 +319,22 @@ export default function TimetableView() {
           document.body.removeChild(a);
           URL.revokeObjectURL(url);
         }
-      }, 'image/png');
+      } else {
+        // Web Share API が利用できない場合は従来のダウンロード
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `fujirock2025_mytimetable_day${selectedDay}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
     } catch (error) {
-      console.error('Export as image failed:', error);
-      alert('画像の保存に失敗しました。もう一度お試しください。');
+      console.error('Share failed:', error);
+      alert('シェアに失敗しました。もう一度お試しください。');
     } finally {
-      setIsExportingImage(false);
+      setIsSharing(false);
     }
   };
 
@@ -447,21 +481,21 @@ export default function TimetableView() {
               <h3 className="text-xl sm:text-2xl font-bold text-foreground">My Timetable</h3>
               <div className="flex gap-2">
                 <Button
-                  onClick={() => exportTimetableAsImage()}
+                  onClick={() => shareMyTimetable()}
                   size="sm"
                   variant="outline"
-                  disabled={isExportingImage || myTimetable.length === 0}
-                  className={isExportingImage ? 'opacity-50 cursor-not-allowed' : ''}
-                  title="画像として保存"
+                  disabled={isSharing || myTimetable.length === 0}
+                  className={isSharing ? 'opacity-50 cursor-not-allowed' : ''}
+                  title="タイムテーブルをシェア"
                 >
-                  {isExportingImage ? (
+                  {isSharing ? (
                     <div className="mr-2">
                       <LoadingSpinner size="sm" />
                     </div>
                   ) : (
-                    <Image className="h-4 w-4 mr-2" aria-label="画像として保存" />
+                    <Share2 className="h-4 w-4 mr-2" aria-label="シェア" />
                   )}
-                  {isExportingImage ? '保存中...' : '画像'}
+                  {isSharing ? 'シェア中...' : 'シェア'}
                 </Button>
                 {/* <Button
                   onClick={() => exportTimetable()}
