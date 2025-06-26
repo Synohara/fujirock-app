@@ -210,7 +210,7 @@ export default function TimetableView() {
       // 高解像度対応のキャンバスサイズ設定（スマホ最適化）
       const scale = 3; // 3倍の解像度
       const width = 520; // さらに幅を縮小
-      const itemHeight = 50; // アイテム高をさらに縮小
+      const itemHeight = 40; // アイテム高をさらに縮小（コンパクト化）
       const headerHeight = 70; // ヘッダー高をさらに縮小
       const padding = 12; // パディングをさらに削減
       const height = headerHeight + (selectedPerformances.length * itemHeight) + padding * 2;
@@ -228,19 +228,19 @@ export default function TimetableView() {
       ctx.fillRect(0, 0, width, height);
 
       // フォント設定（高品質レンダリング）
-      ctx.textAlign = 'left';
+      ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
 
-      // ヘッダー描画（コンパクト化）
+      // ヘッダー描画（中央寄せ）
       ctx.fillStyle = '#333333';
       ctx.font = 'bold 18px Arial';
-      ctx.fillText('FUJI ROCK FESTIVAL 2025', padding, padding);
+      ctx.fillText('FUJI ROCK FESTIVAL 2025', width / 2, padding);
       
       ctx.font = 'bold 14px Arial';
       ctx.fillStyle = '#D97706';
-      ctx.fillText(`My Timetable - Day ${selectedDay}`, padding, padding + 25);
+      ctx.fillText(`My Timetable - Day ${selectedDay}`, width / 2, padding + 25);
 
       // 各パフォーマンスを描画
       selectedPerformances.forEach((performance, index) => {
@@ -263,24 +263,31 @@ export default function TimetableView() {
             break;
         }
 
-        // ステージバー（コンパクト化）
+        // ステージバー（左端に配置）
         ctx.fillStyle = stageColor;
-        ctx.fillRect(15, y, 3, itemHeight - 6);
+        ctx.fillRect(15, y, 3, itemHeight - 4);
 
-        // アーティスト名（コンパクト化）
+        // テキストを左寄せに変更してから描画
+        ctx.textAlign = 'left';
+
+        // アーティスト名（左寄せで配置）
         ctx.fillStyle = '#1F2937';
         ctx.font = 'bold 13px Arial';
         ctx.fillText(performance.artist, 25, y + 2);
 
-        // 時間（コンパクト化）
+        // 時間（左寄せで配置）
         ctx.fillStyle = '#6B7280';
         ctx.font = '11px Arial';
         ctx.fillText(`${performance.start_time} - ${performance.end_time}`, 25, y + 18);
 
-        // ステージ名（コンパクト化）
+        // ステージ名（右端に配置）
+        ctx.textAlign = 'right';
         ctx.fillStyle = '#374151';
-        ctx.font = '9px Arial';
-        ctx.fillText(performance.stage, 25, y + 32);
+        ctx.font = '10px Arial';
+        ctx.fillText(performance.stage, width - 15, y + 18);
+
+        // 次の要素のため中央寄せに戻す
+        ctx.textAlign = 'center';
       });
 
       // Canvas を Blob に変換
