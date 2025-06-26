@@ -117,7 +117,7 @@
 @layer base {
   * {
     border-color: var(--border);
-    outline-color: color-mix(in srgb, var(--ring) 50%, transparent);
+    outline-color: var(--ring);
   }
   body {
     background-color: var(--background);

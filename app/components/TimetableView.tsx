@@ -2,15 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { Performance, TimetableData } from '../types';
-import MapView from './MapView';
 import TimelineView from './TimelineView';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import React from 'react';
-import { Search, MapPin, Calendar, Download, X, Star } from 'lucide-react';
+import { Search, Calendar, Download, X, Star, Image } from 'lucide-react';
 import LoadingSpinner from './LoadingSpinner';
-import SkeletonLoader from './SkeletonLoader';
 
 const STAGE_COLORS = {
   'GREEN STAGE': 'bg-green-600 text-white',
@@ -33,10 +31,11 @@ export default function TimetableView() {
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStage, setSelectedStage] = useState<string>('all');
-  const [viewMode, setViewMode] = useState<'timetable' | 'map' | 'mytimetable'>('timetable');
+  const [viewMode, setViewMode] = useState<'timetable' | 'mytimetable'>('timetable');
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingImage, setIsExportingImage] = useState(false);
 
   useEffect(() => {
     setIsLoading(true);
@@ -174,7 +173,7 @@ export default function TimetableView() {
 
 
 
-  const handleViewModeChange = (mode: 'timetable' | 'map' | 'mytimetable') => {
+  const handleViewModeChange = (mode: 'timetable' | 'mytimetable') => {
     setIsTransitioning(true);
     setTimeout(() => {
       setViewMode(mode);
@@ -230,6 +229,129 @@ export default function TimetableView() {
       console.error('Export failed:', error);
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const exportTimetableAsImage = async () => {
+    setIsExportingImage(true);
+    
+    try {
+      // 選択されたパフォーマンスを取得
+      const selectedPerformances = myTimetable
+        .map(id => timetableData?.performances.find(p => p.id === id))
+        .filter((p): p is Performance => p !== undefined && p.day === selectedDay)
+        .sort((a, b) => {
+          const getTimeValue = (timeStr: string) => {
+            const [hour, minute] = timeStr.split(':').map(Number);
+            return hour >= 0 && hour < 6 ? (hour + 24) * 60 + minute : hour * 60 + minute;
+          };
+          return getTimeValue(a.start_time) - getTimeValue(b.start_time);
+        });
+
+      if (selectedPerformances.length === 0) {
+        alert('選択されたアーティストがありません。');
+        return;
+      }
+
+      // Canvas作成
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas context not available');
+
+      // 高解像度対応のキャンバスサイズ設定
+      const scale = 3; // 3倍の解像度
+      const width = 800;
+      const itemHeight = 80;
+      const headerHeight = 120;
+      const padding = 30;
+      const height = headerHeight + (selectedPerformances.length * itemHeight) + padding * 2;
+      
+      canvas.width = width * scale;
+      canvas.height = height * scale;
+      canvas.style.width = width + 'px';
+      canvas.style.height = height + 'px';
+      
+      // 高解像度描画のためのスケール設定
+      ctx.scale(scale, scale);
+
+      // 背景色（白）
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, width, height);
+
+      // フォント設定（高品質レンダリング）
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+
+      // ヘッダー描画
+      ctx.fillStyle = '#333333';
+      ctx.font = 'bold 28px Arial';
+      ctx.fillText('FUJI ROCK FESTIVAL 2025', padding, padding);
+      
+      ctx.font = 'bold 20px Arial';
+      ctx.fillStyle = '#D97706';
+      ctx.fillText(`My Timetable - Day ${selectedDay}`, padding, padding + 40);
+
+      // 各パフォーマンスを描画
+      selectedPerformances.forEach((performance, index) => {
+        const y = headerHeight + (index * itemHeight) + padding;
+        
+        // ステージ色を取得
+        let stageColor = '#666666';
+        switch (performance.stage) {
+          case 'GREEN STAGE':
+            stageColor = '#16A34A';
+            break;
+          case 'WHITE STAGE':
+            stageColor = '#E5E5E5';
+            break;
+          case 'RED MARQUEE':
+            stageColor = '#DC2626';
+            break;
+          case 'FIELD OF HEAVEN':
+            stageColor = '#2563EB';
+            break;
+        }
+
+        // ステージバー
+        ctx.fillStyle = stageColor;
+        ctx.fillRect(30, y, 6, itemHeight - 10);
+
+        // アーティスト名
+        ctx.fillStyle = '#1F2937';
+        ctx.font = 'bold 18px Arial';
+        ctx.fillText(performance.artist, 50, y + 5);
+
+        // 時間
+        ctx.fillStyle = '#6B7280';
+        ctx.font = '14px Arial';
+        ctx.fillText(`${performance.start_time} - ${performance.end_time}`, 50, y + 30);
+
+        // ステージ名
+        ctx.fillStyle = '#374151';
+        ctx.font = '12px Arial';
+        ctx.fillText(performance.stage, 50, y + 50);
+      });
+
+      // 画像をダウンロード
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `fujirock2025_mytimetable_day${selectedDay}.png`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }
+      }, 'image/png');
+    } catch (error) {
+      console.error('Export as image failed:', error);
+      alert('画像の保存に失敗しました。もう一度お試しください。');
+    } finally {
+      setIsExportingImage(false);
     }
   };
 
@@ -323,14 +445,6 @@ export default function TimetableView() {
               </span>
             )}
           </Button>
-          <Button
-            onClick={() => handleViewModeChange('map')}
-            variant={viewMode === 'map' ? 'default' : 'outline'}
-            className={viewMode === 'map' ? 'bg-gradient-to-r from-yellow-400 to-orange-500 text-black' : ''}
-          >
-            <MapPin className="mr-2 h-4 w-4" />
-            会場マップ・動線
-          </Button>
         </div>
 
 
@@ -377,34 +491,47 @@ export default function TimetableView() {
             </>
           )}
           
-          {!isTransitioning && viewMode === 'map' && (
-            <MapView 
-              myTimetable={myTimetable}
-              timetableData={timetableData}
-              selectedDay={selectedDay}
-            />
-          )}
           
           {!isTransitioning && viewMode === 'mytimetable' && (
           <div className="bg-card rounded-lg p-4 sm:p-6 border border-border">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl sm:text-2xl font-bold text-foreground">My Timetable</h3>
-              <Button
-                onClick={() => exportTimetable()}
-                size="sm"
-                variant="outline"
-                disabled={isExporting}
-                className={isExporting ? 'opacity-50 cursor-not-allowed' : ''}
-              >
-                {isExporting ? (
-                  <div className="mr-2">
-                    <LoadingSpinner size="sm" />
-                  </div>
-                ) : (
-                  <Download className="h-4 w-4 mr-2" />
-                )}
-                {isExporting ? 'エクスポート中...' : 'Export'}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => exportTimetableAsImage()}
+                  size="sm"
+                  variant="outline"
+                  disabled={isExportingImage || myTimetable.length === 0}
+                  className={isExportingImage ? 'opacity-50 cursor-not-allowed' : ''}
+                  title="画像として保存"
+                >
+                  {isExportingImage ? (
+                    <div className="mr-2">
+                      <LoadingSpinner size="sm" />
+                    </div>
+                  ) : (
+                    <Image className="h-4 w-4 mr-2" alt="画像として保存" />
+                  )}
+                  {isExportingImage ? '保存中...' : '画像'}
+                </Button>
+                {/* <Button
+                  onClick={() => exportTimetable()}
+                  size="sm"
+                  variant="outline"
+                  disabled={isExporting || myTimetable.length === 0}
+                  className={isExporting ? 'opacity-50 cursor-not-allowed' : ''}
+                  title="テキストファイルとして保存"
+                >
+                  {isExporting ? (
+                    <div className="mr-2">
+                      <LoadingSpinner size="sm" />
+                    </div>
+                  ) : (
+                    <Download className="h-4 w-4 mr-2" />
+                  )}
+                  {isExporting ? '保存中...' : 'テキスト'}
+                </Button> */}
+              </div>
             </div>
             
             {myTimetable.length === 0 ? (
@@ -438,7 +565,7 @@ export default function TimetableView() {
                   </TabsList>
                 </Tabs>
                 
-                <div className="mt-4">
+                <div id="my-timetable-content" className="mt-4">
                   {(() => {
                     const dayPerformances = myTimetable
                       .map(id => timetableData?.performances.find(p => p.id === id))
